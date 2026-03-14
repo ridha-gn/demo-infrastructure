@@ -8,29 +8,50 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                echo 'Checking out code...'
+                echo '📥 Checking out code...'
             }
         }
         
         stage('Scan Good File') {
             steps {
                 script {
-                    echo 'Scanning good-example.tf...'
+                    echo '🔒 Scanning good-example.tf...'
                     
-                    sh '''
-                        RESPONSE=$(curl -s -X POST ${POLICY_SERVICE}/analyze \
-                          -H "Content-Type: application/json" \
-                          -d "{\\"code_type\\":\\"terraform\\",\\"content\\":\\"$(cat good-example.tf)\\"}")
-                        
-                        echo "$RESPONSE"
-                        
-                        if echo "$RESPONSE" | grep -q '"decision":"ALLOW"'; then
-                            echo "✅ good-example.tf PASSED"
-                        else
-                            echo "❌ good-example.tf FAILED"
-                            exit 1
-                        fi
-                    '''
+                    def response = sh(
+                        script: '''
+python3 << 'PYTHON'
+import requests
+import json
+import sys
+
+try:
+    with open('good-example.tf', 'r') as f:
+        content = f.read()
+    
+    response = requests.post(
+        'http://localhost:8000/analyze',
+        json={'code_type': 'terraform', 'content': content}
+    )
+    result = response.json()
+    print(json.dumps(result, indent=2))
+    
+    if result.get('decision') == 'ALLOW':
+        print("✅ GOOD FILE PASSED")
+        sys.exit(0)
+    else:
+        print("❌ GOOD FILE FAILED")
+        sys.exit(1)
+except Exception as e:
+    print(f"Error: {e}")
+    sys.exit(1)
+PYTHON
+                        ''',
+                        returnStatus: true
+                    )
+                    
+                    if (response != 0) {
+                        error('❌ good-example.tf failed security scan')
+                    }
                 }
             }
         }
@@ -38,44 +59,66 @@ pipeline {
         stage('Scan Bad File') {
             steps {
                 script {
-                    echo 'Scanning bad-example.tf...'
+                    echo '🔒 Scanning bad-example.tf...'
                     
-                    sh '''
-                        RESPONSE=$(curl -s -X POST ${POLICY_SERVICE}/analyze \
-                          -H "Content-Type: application/json" \
-                          -d "{\\"code_type\\":\\"terraform\\",\\"content\\":\\"$(cat bad-example.tf)\\"}")
-                        
-                        echo "$RESPONSE"
-                        
-                        if echo "$RESPONSE" | grep -q '"decision":"BLOCK"'; then
-                            echo "❌ bad-example.tf has violations (expected)"
-                            echo "BLOCKING deployment!"
-                            exit 1
-                        else
-                            echo "⚠️  bad-example.tf passed (unexpected!)"
-                        fi
-                    '''
+                    def response = sh(
+                        script: '''
+python3 << 'PYTHON'
+import requests
+import json
+import sys
+
+try:
+    with open('bad-example.tf', 'r') as f:
+        content = f.read()
+    
+    response = requests.post(
+        'http://localhost:8000/analyze',
+        json={'code_type': 'terraform', 'content': content}
+    )
+    result = response.json()
+    print(json.dumps(result, indent=2))
+    
+    violations = len(result.get('violations', []))
+    print(f"\\nFound {violations} violations")
+    
+    if result.get('decision') == 'BLOCK':
+        print("⚠️  BLOCKING deployment - security violations found")
+        sys.exit(1)
+    else:
+        sys.exit(0)
+except Exception as e:
+    print(f"Error: {e}")
+    sys.exit(1)
+PYTHON
+                        ''',
+                        returnStatus: true
+                    )
+                    
+                    if (response != 0) {
+                        error('❌ Security violations found - BLOCKING DEPLOYMENT')
+                    }
                 }
             }
         }
         
         stage('Build') {
             steps {
-                echo 'Building application...'
+                echo '🏗️  Building application...'
             }
         }
         
         stage('Deploy') {
             steps {
-                echo 'Deploying...'
+                echo '🚀 Deploying...'
             }
         }
     }
     
     post {
         always {
-            echo 'Getting metrics...'
-            sh 'curl -s ${POLICY_SERVICE}/metrics || true'
+            echo '📊 Final metrics:'
+            sh 'curl -s http://localhost:8000/metrics | python3 -m json.tool || true'
         }
     }
 }
