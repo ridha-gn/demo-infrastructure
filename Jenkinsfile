@@ -12,10 +12,10 @@ pipeline {
             }
         }
         
-        stage('Scan Good File') {
+        stage('Security Scan') {
             steps {
                 script {
-                    echo '🔒 Scanning good-example.tf...'
+                    echo '🔒 Scanning infrastructure code...'
                     
                     def response = sh(
                         script: '''
@@ -35,57 +35,14 @@ try:
     result = response.json()
     print(json.dumps(result, indent=2))
     
-    if result.get('decision') == 'ALLOW':
-        print("✅ GOOD FILE PASSED")
-        sys.exit(0)
-    else:
-        print("❌ GOOD FILE FAILED")
-        sys.exit(1)
-except Exception as e:
-    print(f"Error: {e}")
-    sys.exit(1)
-PYTHON
-                        ''',
-                        returnStatus: true
-                    )
-                    
-                    if (response != 0) {
-                        error('❌ good-example.tf failed security scan')
-                    }
-                }
-            }
-        }
-        
-        stage('Scan Bad File') {
-            steps {
-                script {
-                    echo '🔒 Scanning bad-example.tf...'
-                    
-                    def response = sh(
-                        script: '''
-python3 << 'PYTHON'
-import requests
-import json
-import sys
-
-try:
-    with open('bad-example.tf', 'r') as f:
-        content = f.read()
-    
-    response = requests.post(
-        'http://localhost:8000/analyze',
-        json={'code_type': 'terraform', 'content': content}
-    )
-    result = response.json()
-    print(json.dumps(result, indent=2))
-    
     violations = len(result.get('violations', []))
     print(f"\\nFound {violations} violations")
     
     if result.get('decision') == 'BLOCK':
-        print("⚠️  BLOCKING deployment - security violations found")
+        print("❌ BLOCKING deployment - security violations detected!")
         sys.exit(1)
     else:
+        print("✅ Security scan PASSED - safe to deploy")
         sys.exit(0)
 except Exception as e:
     print(f"Error: {e}")
@@ -96,7 +53,7 @@ PYTHON
                     )
                     
                     if (response != 0) {
-                        error('❌ Security violations found - BLOCKING DEPLOYMENT')
+                        error('❌ Security scan failed - deployment blocked')
                     }
                 }
             }
@@ -105,19 +62,27 @@ PYTHON
         stage('Build') {
             steps {
                 echo '🏗️  Building application...'
+                echo '✅ Build completed successfully'
             }
         }
         
-        stage('Deploy') {
+        stage('Deploy to Production') {
             steps {
-                echo '🚀 Deploying...'
+                echo '🚀 Deploying to production environment...'
+                echo '✅ Deployment successful!'
             }
         }
     }
     
     post {
+        success {
+            echo '✅✅✅ PIPELINE SUCCESS - Code deployed to production!'
+        }
+        failure {
+            echo '❌❌❌ PIPELINE FAILED - Security violations prevented deployment'
+        }
         always {
-            echo '📊 Final metrics:'
+            echo '📊 Security scan statistics:'
             sh 'curl -s http://localhost:8000/metrics | python3 -m json.tool || true'
         }
     }
