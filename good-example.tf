@@ -1,5 +1,3 @@
-# Safe Infrastructure Configuration
-# This should PASS security scan
 
 resource "aws_s3_bucket" "secure_data" {
   bucket = "company-secure-data"
@@ -62,4 +60,4 @@ resource "aws_security_group" "restricted_ssh" {
     CostCenter  = "engineering"
   }
 }
-# Last updated: Sun 22 Mar 22:11:24 WAT 2026
+# Demo run at Mon 23 Mar 20:21:02 WAT 2026
