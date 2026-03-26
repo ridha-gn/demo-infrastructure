@@ -1,7 +1,7 @@
 
 resource "aws_s3_bucket" "secure_data" {
   bucket = "company-secure-data"
-  acl    = "public-read"
+  acl    = "private"
 
   server_side_encryption_configuration {
     rule {
